@@ -1,15 +1,17 @@
 package com.zipwhip.api.signals;
 
+import com.google.gson.Gson;
 import com.ning.http.client.AsyncHttpClient;
 import com.zipwhip.api.ApiConnectionConfiguration;
 import com.zipwhip.api.signals.dto.BindResult;
 import com.zipwhip.api.signals.dto.DeliveredMessage;
 import com.zipwhip.api.signals.dto.SubscribeResult;
+import com.zipwhip.api.signals.dto.json.SignalProviderGsonBuilder;
 import com.zipwhip.concurrent.ObservableFuture;
 import com.zipwhip.events.Observer;
 import com.zipwhip.important.ImportantTaskExecutor;
-import com.zipwhip.presence.UserAgent;
-import com.zipwhip.presence.UserAgentCategory;
+import com.zipwhip.signals2.presence.UserAgent;
+import com.zipwhip.signals2.presence.UserAgentCategory;
 import com.zipwhip.util.StringUtil;
 import org.apache.log4j.BasicConfigurator;
 import org.slf4j.Logger;
@@ -31,6 +33,8 @@ public class Example {
     private static String server;
     private static String sessionKey = null;
     private static String clientId;
+    private static Gson gson = SignalProviderGsonBuilder.getInstance();
+
 
     public static void main(String... args) throws Exception {
         BasicConfigurator.configure();
@@ -52,13 +56,22 @@ public class Example {
             server = "http://localhost:8080";
         }
 
+        ImportantTaskExecutor importantTaskExecutor = new ImportantTaskExecutor();
+
+        SocketIOSignalConnection signalConnection = new SocketIOSignalConnection();
+        signalConnection.setImportantTaskExecutor(importantTaskExecutor);
+        signalConnection.setGson(gson);
+        signalConnection.setUrl("http://office.zipwhip.com:4445/");
+
         signalProvider = new SignalProviderImpl();
         signalProvider.setSignalsSubscribeActor(actor);
         signalProvider.setBufferedOrderedQueue(new SilenceOnTheLineBufferedOrderedQueue<DeliveredMessage>());
-        signalProvider.setImportantTaskExecutor(new ImportantTaskExecutor());
+        signalProvider.setImportantTaskExecutor(importantTaskExecutor);
+        signalProvider.setSignalConnection(signalConnection);
+        signalProvider.setGson(gson);
 
-        ApiConnectionConfiguration.SIGNALS_HOST = "localhost";
-        ApiConnectionConfiguration.SIGNALS_PORT = 23123;
+        ApiConnectionConfiguration.SIGNALS_HOST = "office.zipwhip.com";
+        ApiConnectionConfiguration.SIGNALS_PORT = 4445;
 
         actor.setUrl(server + SUBSCRIBE_URL);
         actor.setClient(new AsyncHttpClient());
@@ -68,7 +81,9 @@ public class Example {
         userAgent.setCategory(UserAgentCategory.Desktop);
         userAgent.setVersion("1.0.0");
 
-        LOGGER.debug("Connecting to " + server);
+        signalProvider.getMessageReceivedEvent().addObserver(DELIVERED_MESSAGE_OBSERVER);
+        signalProvider.getBindEvent().addObserver(BIND_RESULT_OBSERVER);
+
         ObservableFuture<Void> connectFuture = signalProvider.connect(userAgent);
 
         connectFuture.addObserver(new Observer<ObservableFuture<Void>>() {
@@ -84,9 +99,6 @@ public class Example {
                 signalProvider.subscribe(sessionKey, null).addObserver(SUBSCRIBE_OBSERVER);
             }
         });
-
-        signalProvider.getMessageReceivedEvent().addObserver(DELIVERED_MESSAGE_OBSERVER);
-        signalProvider.getBindEvent().addObserver(BIND_RESULT_OBSERVER);
     }
 
     public static final Observer<ObservableFuture<SubscribeResult>> SUBSCRIBE_OBSERVER = new Observer<ObservableFuture<SubscribeResult>>() {

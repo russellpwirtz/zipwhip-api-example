@@ -2,7 +2,6 @@ package com.zipwhip.api.signals;
 
 import com.google.gson.Gson;
 import com.ning.http.client.AsyncHttpClient;
-import com.zipwhip.api.ApiConnectionConfiguration;
 import com.zipwhip.api.signals.dto.BindResult;
 import com.zipwhip.api.signals.dto.DeliveredMessage;
 import com.zipwhip.api.signals.dto.SubscribeResult;
@@ -30,7 +29,8 @@ public class Example {
 
     private static SignalProviderImpl signalProvider;
     private static NingSignalsSubscribeActor actor = new NingSignalsSubscribeActor();
-    private static String server;
+    private static String apiHost;
+    private static String signalsHost = null;
     private static String sessionKey = null;
     private static String clientId;
     private static Gson gson = SignalProviderGsonBuilder.getInstance();
@@ -40,8 +40,10 @@ public class Example {
         BasicConfigurator.configure();
 
         for (int i = 0; i < args.length; i++) {
-            if (args[i].equals("-server")) {
-                server = args[++i];
+            if (args[i].equals("-apiHost")) {
+                apiHost = args[++i];
+            } else if (args[i].equals("-signalsHost")) {
+                signalsHost = args[++i];
             } else if (args[i].equals("-sessionKey")) {
                 sessionKey = args[++i];
             }
@@ -52,8 +54,12 @@ public class Example {
             return;
         }
 
-        if (StringUtil.isNullOrEmpty(server)) {
-            server = "http://localhost:8080";
+        if (StringUtil.isNullOrEmpty(apiHost)) {
+            apiHost = "http://network.zipwhip.com:80";
+        }
+
+        if (StringUtil.isNullOrEmpty(signalsHost)) {
+            signalsHost = "http://10.50.245.101:80";
         }
 
         ImportantTaskExecutor importantTaskExecutor = new ImportantTaskExecutor();
@@ -61,7 +67,7 @@ public class Example {
         SocketIOSignalConnection signalConnection = new SocketIOSignalConnection();
         signalConnection.setImportantTaskExecutor(importantTaskExecutor);
         signalConnection.setGson(gson);
-        signalConnection.setUrl("http://office.zipwhip.com:4445/");
+        signalConnection.setUrl(signalsHost);
 
         signalProvider = new SignalProviderImpl();
         signalProvider.setSignalsSubscribeActor(actor);
@@ -70,10 +76,7 @@ public class Example {
         signalProvider.setSignalConnection(signalConnection);
         signalProvider.setGson(gson);
 
-        ApiConnectionConfiguration.SIGNALS_HOST = "office.zipwhip.com";
-        ApiConnectionConfiguration.SIGNALS_PORT = 4445;
-
-        actor.setUrl(server + SUBSCRIBE_URL);
+        actor.setUrl(apiHost + SUBSCRIBE_URL);
         actor.setClient(new AsyncHttpClient());
 
         UserAgent userAgent = new UserAgent();

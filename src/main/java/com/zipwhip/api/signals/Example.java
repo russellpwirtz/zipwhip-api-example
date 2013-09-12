@@ -9,6 +9,8 @@ import com.zipwhip.api.signals.dto.json.SignalProviderGsonBuilder;
 import com.zipwhip.concurrent.ObservableFuture;
 import com.zipwhip.events.Observer;
 import com.zipwhip.important.ImportantTaskExecutor;
+import com.zipwhip.important.ZipwhipSchedulerTimer;
+import com.zipwhip.reliable.retry.ConstantIntervalRetryStrategy;
 import com.zipwhip.signals2.presence.UserAgent;
 import com.zipwhip.signals2.presence.UserAgentCategory;
 import com.zipwhip.util.StringUtil;
@@ -68,6 +70,8 @@ public class Example {
         signalConnection.setImportantTaskExecutor(importantTaskExecutor);
         signalConnection.setGson(gson);
         signalConnection.setUrl(signalsHost);
+        signalConnection.setRetryStrategy(new ConstantIntervalRetryStrategy(0));
+        signalConnection.setTimer(new ZipwhipSchedulerTimer(null));
 
         signalProvider = new SignalProviderImpl();
         signalProvider.setSignalsSubscribeActor(actor);

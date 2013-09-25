@@ -1,22 +1,25 @@
 package com.zipwhip.api.signals;
 
-import com.google.gson.Gson;
 import com.ning.http.client.AsyncHttpClient;
 import com.zipwhip.api.signals.dto.BindResult;
 import com.zipwhip.api.signals.dto.DeliveredMessage;
 import com.zipwhip.api.signals.dto.SubscribeResult;
-import com.zipwhip.api.signals.dto.json.SignalProviderGsonBuilder;
 import com.zipwhip.concurrent.ObservableFuture;
 import com.zipwhip.events.Observer;
 import com.zipwhip.important.ImportantTaskExecutor;
-import com.zipwhip.important.ZipwhipSchedulerTimer;
-import com.zipwhip.reliable.retry.ConstantIntervalRetryStrategy;
 import com.zipwhip.signals2.presence.UserAgent;
 import com.zipwhip.signals2.presence.UserAgentCategory;
+import com.zipwhip.timers.HashedWheelTimer;
+import com.zipwhip.timers.Timer;
+import com.zipwhip.util.Factory;
 import com.zipwhip.util.StringUtil;
 import org.apache.log4j.BasicConfigurator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 /**
  * Created by IntelliJ IDEA.
@@ -29,14 +32,13 @@ public class Example {
     private static final Logger LOGGER = LoggerFactory.getLogger(Example.class);
     private static final String SUBSCRIBE_URL = "/signal/subscribe";
 
-    private static SignalProviderImpl signalProvider;
-    private static NingSignalsSubscribeActor actor = new NingSignalsSubscribeActor();
     private static String apiHost;
     private static String signalsHost = null;
     private static String sessionKey = null;
-    private static String clientId;
-    private static Gson gson = SignalProviderGsonBuilder.getInstance();
+//    private static String clientId;
 
+    private static ImportantTaskExecutor importantTaskExecutor = new ImportantTaskExecutor();
+    private static AsyncHttpClient asyncHttpClient = new AsyncHttpClient();
 
     public static void main(String... args) throws Exception {
         BasicConfigurator.configure();
@@ -61,51 +63,77 @@ public class Example {
         }
 
         if (StringUtil.isNullOrEmpty(signalsHost)) {
-            signalsHost = "http://10.50.245.101:80";
+            signalsHost = "http://localhost:8000";
+//            signalsHost = "http://10.50.245.101:80";
         }
 
-        ImportantTaskExecutor importantTaskExecutor = new ImportantTaskExecutor();
+        Executor executor = Executors.newSingleThreadExecutor();
+        Timer timer = new HashedWheelTimer();
 
-        SocketIOSignalConnection signalConnection = new SocketIOSignalConnection();
-        signalConnection.setImportantTaskExecutor(importantTaskExecutor);
-        signalConnection.setGson(gson);
-        signalConnection.setUrl(signalsHost);
-        signalConnection.setRetryStrategy(new ConstantIntervalRetryStrategy(0));
-        signalConnection.setTimer(new ZipwhipSchedulerTimer(null));
+        SocketIoSignalConnectionFactory signalConnectionFactory = new SocketIoSignalConnectionFactory();
 
-        signalProvider = new SignalProviderImpl();
-        signalProvider.setSignalsSubscribeActor(actor);
-        signalProvider.setBufferedOrderedQueue(new SilenceOnTheLineBufferedOrderedQueue<DeliveredMessage>());
-        signalProvider.setImportantTaskExecutor(importantTaskExecutor);
-        signalProvider.setSignalConnection(signalConnection);
-        signalProvider.setGson(gson);
+        signalConnectionFactory.setSignalsUrl(signalsHost);
+        signalConnectionFactory.setImportantTaskExecutor(importantTaskExecutor);
+        signalConnectionFactory.setExecutor(executor);
 
-        actor.setUrl(apiHost + SUBSCRIBE_URL);
-        actor.setClient(new AsyncHttpClient());
+        SignalProviderFactory signalProviderFactory = new SignalProviderFactory();
+
+        signalProviderFactory.setSignalConnectionFactory(signalConnectionFactory);
+        signalProviderFactory.setImportantTaskExecutor(importantTaskExecutor);
+        signalProviderFactory.setBufferedOrderedQueue(new SilenceOnTheLineBufferedOrderedQueue<DeliveredMessage>(timer));
+        signalProviderFactory.setSignalsSubscribeActor(new NingSignalsSubscribeActor(asyncHttpClient, apiHost + SUBSCRIBE_URL));
+
+        for (int i = 0; i < 1; i++) {
+            Thread.sleep(500);
+
+            LOGGER.debug("Connecting " + i);
+
+            connect(signalProviderFactory).await();
+
+            LOGGER.debug("Connected " + i);
+        }
+    }
+
+    private static CountDownLatch connect(Factory<SignalProvider> signalProviderFactory) {
+        final SignalProvider signalProvider = signalProviderFactory.create();
+
+        signalProvider.getSignalReceivedEvent().addObserver(new SignalObserver());
+        signalProvider.getBindEvent().addObserver(BIND_RESULT_OBSERVER);
+
+        final String[] clientId = {null};
+        final CountDownLatch latch = new CountDownLatch(1);
+//        clientId = "d21952f2-d7a6-4d7c-9452-e6d517548e93";
 
         UserAgent userAgent = new UserAgent();
         userAgent.setBuild("zipwhip-api example");
         userAgent.setCategory(UserAgentCategory.Desktop);
         userAgent.setVersion("1.0.0");
 
-        signalProvider.getMessageReceivedEvent().addObserver(DELIVERED_MESSAGE_OBSERVER);
-        signalProvider.getBindEvent().addObserver(BIND_RESULT_OBSERVER);
-
-        ObservableFuture<Void> connectFuture = signalProvider.connect(userAgent);
+        ObservableFuture<Void> connectFuture = signalProvider.connect(userAgent, clientId[0], clientId[0]);
 
         connectFuture.addObserver(new Observer<ObservableFuture<Void>>() {
-            public void notify(Object sender, ObservableFuture<Void> item) {
+            public void notify(Object sender, ObservableFuture <Void> item) {
                 if (item.isFailed()) {
                     LOGGER.error("Couldn't connect! " + item.getCause());
                     return;
                 }
 
                 LOGGER.debug("Connected!");
-                clientId = signalProvider.getClientId();
+                clientId[0] = signalProvider.getClientId();
 
-                signalProvider.subscribe(sessionKey, null).addObserver(SUBSCRIBE_OBSERVER);
+                ObservableFuture<SubscribeResult> future = signalProvider.subscribe(sessionKey, null);
+
+                future.addObserver(SUBSCRIBE_OBSERVER);
+                future.addObserver(new Observer<ObservableFuture<SubscribeResult>>() {
+                    @Override
+                    public void notify(Object sender, ObservableFuture<SubscribeResult> item) {
+                        latch.countDown();
+                    }
+                });
             }
         });
+
+        return latch;
     }
 
     public static final Observer<ObservableFuture<SubscribeResult>> SUBSCRIBE_OBSERVER = new Observer<ObservableFuture<SubscribeResult>>() {
@@ -121,13 +149,7 @@ public class Example {
 
     public static final Observer<BindResult> BIND_RESULT_OBSERVER = new Observer<BindResult>() {
         public void notify(Object sender, BindResult item) {
-            LOGGER.debug("Received bind event for clientId: " + item.getClientId());
-        }
-    };
-
-    public static final Observer<DeliveredMessage> DELIVERED_MESSAGE_OBSERVER = new Observer<DeliveredMessage>() {
-        public void notify(Object sender, DeliveredMessage item) {
-            LOGGER.debug("Received message: " + item.getMessage());
+            LOGGER.debug("Received bind event for clientId: " + item.getClientId() + ". Anything before " + item.getTimestamp() + " is considered backfill.");
         }
     };
 }

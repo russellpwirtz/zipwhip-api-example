@@ -66,7 +66,7 @@ public class Example {
 
         ImportantTaskExecutor importantTaskExecutor = new ImportantTaskExecutor();
 
-        SocketIOSignalConnection signalConnection = new SocketIOSignalConnection();
+        SocketIoSignalConnection signalConnection = new SocketIoSignalConnection();
         signalConnection.setImportantTaskExecutor(importantTaskExecutor);
         signalConnection.setGson(gson);
         signalConnection.setUrl(signalsHost);
@@ -83,12 +83,12 @@ public class Example {
         actor.setUrl(apiHost + SUBSCRIBE_URL);
         actor.setClient(new AsyncHttpClient());
 
-        UserAgent userAgent = new UserAgent();
+        final UserAgent userAgent = new UserAgent();
         userAgent.setBuild("zipwhip-api example");
         userAgent.setCategory(UserAgentCategory.Desktop);
         userAgent.setVersion("1.0.0");
 
-        signalProvider.getMessageReceivedEvent().addObserver(DELIVERED_MESSAGE_OBSERVER);
+        signalProvider.getSignalReceivedEvent().addObserver(SIGNAL_RECEIVED_OBSERVER);
         signalProvider.getBindEvent().addObserver(BIND_RESULT_OBSERVER);
 
         ObservableFuture<Void> connectFuture = signalProvider.connect(userAgent);
@@ -96,8 +96,7 @@ public class Example {
         connectFuture.addObserver(new Observer<ObservableFuture<Void>>() {
             public void notify(Object sender, ObservableFuture<Void> item) {
                 if (item.isFailed()) {
-                    LOGGER.error("Couldn't connect! " + item.getCause());
-                    return;
+                    throw new RuntimeException("Couldn't connect!", item.getCause());
                 }
 
                 LOGGER.debug("Connected!");
@@ -111,8 +110,7 @@ public class Example {
     public static final Observer<ObservableFuture<SubscribeResult>> SUBSCRIBE_OBSERVER = new Observer<ObservableFuture<SubscribeResult>>() {
         public void notify(Object sender, ObservableFuture<SubscribeResult> item) {
             if (item.isFailed()) {
-                LOGGER.error("Couldn't subscribe! " + item.getCause());
-                return;
+                throw new RuntimeException("Couldn't subscribe!", item.getCause());
             }
 
             LOGGER.debug("Subscribed!");
@@ -125,9 +123,9 @@ public class Example {
         }
     };
 
-    public static final Observer<DeliveredMessage> DELIVERED_MESSAGE_OBSERVER = new Observer<DeliveredMessage>() {
+    public static final Observer<DeliveredMessage> SIGNAL_RECEIVED_OBSERVER = new Observer<DeliveredMessage>() {
         public void notify(Object sender, DeliveredMessage item) {
-            LOGGER.debug("Received message: " + item.getMessage());
+            LOGGER.debug("Received message: " + item.getContent());
         }
     };
 }

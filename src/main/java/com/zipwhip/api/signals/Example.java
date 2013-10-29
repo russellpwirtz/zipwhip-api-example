@@ -17,6 +17,7 @@ import org.apache.log4j.BasicConfigurator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -35,6 +36,7 @@ public class Example {
     private static String apiHost;
     private static String signalsHost = null;
     private static String sessionKey = null;
+    private static int clients = 1;
 //    private static String clientId;
 
     private static ImportantTaskExecutor importantTaskExecutor = new ImportantTaskExecutor();
@@ -50,13 +52,15 @@ public class Example {
                 signalsHost = args[++i];
             } else if (args[i].equals("-sessionKey")) {
                 sessionKey = args[++i];
+            } else if (args[i].equals("-clients")) {
+                clients = Integer.parseInt(args[++i]);
             }
         }
 
-        if (StringUtil.isNullOrEmpty(sessionKey)) {
-            System.err.println("The required -sessionKey parameter is missing");
-            return;
-        }
+//        if (StringUtil.isNullOrEmpty(sessionKey)) {
+//            System.err.println("The required -sessionKey parameter is missing");
+//            return;
+//        }
 
         if (StringUtil.isNullOrEmpty(apiHost)) {
             apiHost = "http://network.zipwhip.com:80";
@@ -64,7 +68,6 @@ public class Example {
 
         if (StringUtil.isNullOrEmpty(signalsHost)) {
             signalsHost = "http://localhost:8000";
-//            signalsHost = "http://10.50.245.101:80";
         }
 
         Executor executor = Executors.newSingleThreadExecutor();
@@ -83,7 +86,7 @@ public class Example {
         signalProviderFactory.setBufferedOrderedQueue(new SilenceOnTheLineBufferedOrderedQueue<DeliveredMessage>(timer));
         signalProviderFactory.setSignalsSubscribeActor(new NingSignalsSubscribeActor(asyncHttpClient, apiHost + SUBSCRIBE_URL));
 
-        for (int i = 0; i < 1; i++) {
+        for (int i = 0; i < clients; i++) {
             Thread.sleep(500);
 
             LOGGER.debug("Connecting " + i);
@@ -121,7 +124,7 @@ public class Example {
                 LOGGER.debug("Connected!");
                 clientId[0] = signalProvider.getClientId();
 
-                ObservableFuture<SubscribeResult> future = signalProvider.subscribe(sessionKey, null);
+                ObservableFuture<SubscribeResult> future = signalProvider.subscribe(StringUtil.exists(sessionKey) ? sessionKey : UUID.randomUUID().toString(), null);
 
                 future.addObserver(SUBSCRIBE_OBSERVER);
                 future.addObserver(new Observer<ObservableFuture<SubscribeResult>>() {

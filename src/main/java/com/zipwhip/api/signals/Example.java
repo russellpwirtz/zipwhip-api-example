@@ -80,10 +80,11 @@ public class Example {
         signalConnectionFactory.setExecutor(executor);
 
         SignalProviderFactory signalProviderFactory = new SignalProviderFactory();
+        Factory<BufferedOrderedQueue<DeliveredMessage>> bufferedOrderedQueueFactory = new SilenceOnTheLineBufferedOrderedQueueFactory(timer);
 
         signalProviderFactory.setSignalConnectionFactory(signalConnectionFactory);
         signalProviderFactory.setImportantTaskExecutor(importantTaskExecutor);
-        signalProviderFactory.setBufferedOrderedQueue(new SilenceOnTheLineBufferedOrderedQueue<DeliveredMessage>(timer));
+        signalProviderFactory.setBufferedOrderedQueueFactory(bufferedOrderedQueueFactory);
         signalProviderFactory.setSignalsSubscribeActor(new NingSignalsSubscribeActor(asyncHttpClient, apiHost + SUBSCRIBE_URL));
 
         for (int i = 0; i < clients; i++) {

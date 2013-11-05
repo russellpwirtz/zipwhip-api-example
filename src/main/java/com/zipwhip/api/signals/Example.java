@@ -114,7 +114,7 @@ public class Example {
                     Random random = new Random();
                     TestClient client = connectedClients.get(random.nextInt(connectedClients.size()));
                     Iterator<String> i = client.channels.iterator();
-                    for (int j = 0; j < random.nextInt(3); j++){
+                    for (int j = 0; j < random.nextInt(client.channels.size()); j++){
                         i.next();
                     }
 
@@ -199,6 +199,7 @@ public class Example {
                         public void notify(Object sender, ObservableFuture<SubscribeResult> item) {
                             if (item.isCancelled() || item.isFailed()) {
                                 LOGGER.error("Failed to subscribe!", item.getCause());
+                                latch.countDown();
                                 return;
                             }
 

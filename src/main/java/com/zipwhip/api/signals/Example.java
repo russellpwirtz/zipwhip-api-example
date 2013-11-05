@@ -17,7 +17,8 @@ import org.apache.log4j.BasicConfigurator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.UUID;
+import java.io.IOException;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -37,6 +38,7 @@ public class Example {
     private static String signalsHost = null;
     private static String sessionKey = null;
     private static int clients = 1;
+    private static List<TestClient> connectedClients = new ArrayList<TestClient>();
 //    private static String clientId;
 
     private static ImportantTaskExecutor importantTaskExecutor = new ImportantTaskExecutor();
@@ -96,48 +98,51 @@ public class Example {
 
             LOGGER.debug("Connected " + i);
         }
+
+        new Thread(){
+            @Override
+            public void run() {
+                while(true) {
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException e) {}
+
+                    if (connectedClients.isEmpty()) {
+                        continue;
+                    }
+
+                    Random random = new Random();
+                    TestClient client = connectedClients.get(random.nextInt(connectedClients.size()));
+                    Iterator<String> i = client.channels.iterator();
+                    for (int j = 0; j < random.nextInt(3); j++){
+                        i.next();
+                    }
+
+                    try {
+                        inject(i.next());
+                    } catch (IOException e) {
+                        LOGGER.error("IOError: ", e);
+                    }
+                }
+            }
+        }.start();
     }
 
-    private static CountDownLatch connect(Factory<SignalProvider> signalProviderFactory) {
-        final SignalProvider signalProvider = signalProviderFactory.create();
-
-        signalProvider.getSignalReceivedEvent().addObserver(new SignalObserver());
-        signalProvider.getBindEvent().addObserver(BIND_RESULT_OBSERVER);
-
-        final String[] clientId = {null};
-        final CountDownLatch latch = new CountDownLatch(1);
-//        clientId = "d21952f2-d7a6-4d7c-9452-e6d517548e93";
-
+    private static CountDownLatch connect(SignalProviderFactory signalProviderFactory) {
         UserAgent userAgent = new UserAgent();
         userAgent.setBuild("zipwhip-api example");
         userAgent.setCategory(UserAgentCategory.Desktop);
         userAgent.setVersion("1.0.0");
 
-        ObservableFuture<Void> connectFuture = signalProvider.connect(userAgent, clientId[0], clientId[0]);
+        final TestClient client = createTestClient(signalProviderFactory);
 
-        connectFuture.addObserver(new Observer<ObservableFuture<Void>>() {
-            public void notify(Object sender, ObservableFuture <Void> item) {
-                if (item.isFailed()) {
-                    LOGGER.error("Couldn't connect! " + item.getCause());
-                    return;
-                }
+        final String[] clientId = {null};
+        return client.connect(userAgent, clientId[0], clientId[0]);
 
-                LOGGER.debug("Connected!");
-                clientId[0] = signalProvider.getClientId();
+    }
 
-                ObservableFuture<SubscribeResult> future = signalProvider.subscribe(StringUtil.exists(sessionKey) ? sessionKey : UUID.randomUUID().toString(), null);
-
-                future.addObserver(SUBSCRIBE_OBSERVER);
-                future.addObserver(new Observer<ObservableFuture<SubscribeResult>>() {
-                    @Override
-                    public void notify(Object sender, ObservableFuture<SubscribeResult> item) {
-                        latch.countDown();
-                    }
-                });
-            }
-        });
-
-        return latch;
+    private static TestClient createTestClient(SignalProviderFactory signalProviderFactory) {
+        return new TestClient((SignalProviderImpl) signalProviderFactory.create());
     }
 
     public static final Observer<ObservableFuture<SubscribeResult>> SUBSCRIBE_OBSERVER = new Observer<ObservableFuture<SubscribeResult>>() {
@@ -156,4 +161,69 @@ public class Example {
             LOGGER.debug("Received bind event for clientId: " + item.getClientId() + ". Anything before " + item.getTimestamp() + " is considered backfill.");
         }
     };
+
+    private static class TestClient {
+
+        private SignalProviderImpl signalProvider;
+        private Set<String> channels;
+        private String clientId;
+        private String subscriptionId;
+
+        public TestClient(SignalProviderImpl signalProvider) {
+            this.signalProvider = signalProvider;
+
+            signalProvider.getSignalReceivedEvent().addObserver(new SignalObserver());
+            signalProvider.getBindEvent().addObserver(BIND_RESULT_OBSERVER);
+        }
+
+        public CountDownLatch connect(UserAgent userAgent, String clientId, String token) {
+            final CountDownLatch latch = new CountDownLatch(1);
+
+            ObservableFuture<Void> connectFuture = signalProvider.connect(userAgent, clientId, token);
+
+            connectFuture.addObserver(new Observer<ObservableFuture<Void>>() {
+                public void notify(Object sender, ObservableFuture <Void> item) {
+                    if (item.isFailed()) {
+                        LOGGER.error("Couldn't connect! " + item.getCause());
+                        return;
+                    }
+
+                    LOGGER.debug("Connected!");
+                    TestClient.this.clientId = signalProvider.getClientId();
+
+                    ObservableFuture<SubscribeResult> future = signalProvider.subscribe(StringUtil.exists(sessionKey) ? sessionKey : UUID.randomUUID().toString(), null);
+
+                    future.addObserver(SUBSCRIBE_OBSERVER);
+                    future.addObserver(new Observer<ObservableFuture<SubscribeResult>>() {
+                        @Override
+                        public void notify(Object sender, ObservableFuture<SubscribeResult> item) {
+                            if (item.isCancelled() || item.isFailed()) {
+                                LOGGER.error("Failed to subscribe!", item.getCause());
+                                return;
+                            }
+
+                            latch.countDown();
+
+                            channels = item.getResult().getChannels();
+                            subscriptionId = item.getResult().getSubscriptionId();
+
+                            connectedClients.add(TestClient.this);
+                        }
+                    });
+                }
+            });
+
+            return latch;
+        }
+    }
+
+    public static void inject(String channel) throws IOException {
+        AsyncHttpClient.BoundRequestBuilder builder = asyncHttpClient.preparePost(apiHost + "/signal/inject");
+
+        builder.addParameter("channel", channel);
+        builder.addParameter("content", UUID.randomUUID().toString());
+
+        builder.execute();
+    }
+
 }

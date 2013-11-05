@@ -88,7 +88,7 @@ public class Example {
         signalProviderFactory.setSignalsSubscribeActor(new NingSignalsSubscribeActor(asyncHttpClient, apiHost + SUBSCRIBE_URL));
 
         for (int i = 0; i < clients; i++) {
-            Thread.sleep(500);
+            Thread.sleep(50);
 
             LOGGER.debug("Connecting " + i);
 

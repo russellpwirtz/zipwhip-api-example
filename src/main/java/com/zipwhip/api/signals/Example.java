@@ -108,6 +108,7 @@ public class Example {
                     } catch (InterruptedException e) {}
 
                     if (connectedClients.isEmpty()) {
+                        LOGGER.warn("No connected clients!");
                         continue;
                     }
 
@@ -119,7 +120,7 @@ public class Example {
                     }
 
                     try {
-                        inject(i.next());
+                        inject(i.next(), client.sessionKey);
                     } catch (IOException e) {
                         LOGGER.error("IOError: ", e);
                     }
@@ -168,6 +169,7 @@ public class Example {
         private Set<String> channels;
         private String clientId;
         private String subscriptionId;
+        private String sessionKey;
 
         public TestClient(SignalProviderImpl signalProvider) {
             this.signalProvider = signalProvider;
@@ -191,7 +193,12 @@ public class Example {
                     LOGGER.debug("Connected!");
                     TestClient.this.clientId = signalProvider.getClientId();
 
-                    ObservableFuture<SubscribeResult> future = signalProvider.subscribe(StringUtil.exists(sessionKey) ? sessionKey : UUID.randomUUID().toString(), null);
+                    if (StringUtil.isNullOrEmpty(sessionKey)) {
+                        TestClient.this.sessionKey = UUID.randomUUID().toString();
+                    } else {
+                        TestClient.this.sessionKey = Example.sessionKey;
+                    }
+                    ObservableFuture<SubscribeResult> future = signalProvider.subscribe(TestClient.this.sessionKey, null);
 
                     future.addObserver(SUBSCRIBE_OBSERVER);
                     future.addObserver(new Observer<ObservableFuture<SubscribeResult>>() {
@@ -218,10 +225,11 @@ public class Example {
         }
     }
 
-    public static void inject(String channel) throws IOException {
+    public static void inject(String channel, String session) throws IOException {
         AsyncHttpClient.BoundRequestBuilder builder = asyncHttpClient.preparePost(apiHost + "/signal/inject");
 
         builder.addParameter("channel", channel);
+        builder.addParameter("session", session);
         builder.addParameter("content", UUID.randomUUID().toString());
 
         builder.execute();

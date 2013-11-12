@@ -34,12 +34,12 @@ public class Example {
     private static final Logger LOGGER = LoggerFactory.getLogger(Example.class);
     private static final String SUBSCRIBE_URL = "/signal/subscribe";
 
-    private static String apiHost;
-    private static String signalsHost = null;
+    private static String apiHost = "http://network.zipwhip.com:80";
+    private static String signalsHost = "http://localhost:8000";
     private static String sessionKey = null;
     private static int clients = 1;
+    private static Boolean doInject = false;
     private static List<TestClient> connectedClients = new ArrayList<TestClient>();
-//    private static String clientId;
 
     private static ImportantTaskExecutor importantTaskExecutor = new ImportantTaskExecutor();
     private static AsyncHttpClient asyncHttpClient = new AsyncHttpClient();
@@ -56,20 +56,9 @@ public class Example {
                 sessionKey = args[++i];
             } else if (args[i].equals("-clients")) {
                 clients = Integer.parseInt(args[++i]);
+            } else if (args[i].equals("-doInject")) {
+                doInject = Boolean.parseBoolean(args[++i]);
             }
-        }
-
-//        if (StringUtil.isNullOrEmpty(sessionKey)) {
-//            System.err.println("The required -sessionKey parameter is missing");
-//            return;
-//        }
-
-        if (StringUtil.isNullOrEmpty(apiHost)) {
-            apiHost = "http://network.zipwhip.com:80";
-        }
-
-        if (StringUtil.isNullOrEmpty(signalsHost)) {
-            signalsHost = "http://localhost:8000";
         }
 
         Executor executor = Executors.newSingleThreadExecutor();
@@ -93,40 +82,46 @@ public class Example {
             Thread.sleep(50);
 
             LOGGER.debug("Connecting " + i);
-
             connect(signalProviderFactory).await();
-
             LOGGER.debug("Connected " + i);
         }
 
-        new Thread(){
-            @Override
-            public void run() {
-                while(true) {
-                    try {
-                        Thread.sleep(500);
-                    } catch (InterruptedException e) {}
+        if (doInject) {
+            new Thread(){
+                @Override
+                public void run() {
+                    while(true) {
+                        try {
+                            Thread.sleep(500);
+                        } catch (InterruptedException e) {}
 
-                    if (connectedClients.isEmpty()) {
-                        LOGGER.warn("No connected clients!");
-                        continue;
-                    }
+                        if (connectedClients.isEmpty()) {
+                            LOGGER.warn("No connected clients!");
+                            break;
+                        }
 
-                    Random random = new Random();
-                    TestClient client = connectedClients.get(random.nextInt(connectedClients.size()));
-                    Iterator<String> i = client.channels.iterator();
-                    for (int j = 0; j < random.nextInt(client.channels.size()); j++){
-                        i.next();
-                    }
+                        Random random = new Random();
+                        TestClient client = connectedClients.get(random.nextInt(connectedClients.size()));
 
-                    try {
-                        inject(i.next(), client.sessionKey);
-                    } catch (IOException e) {
-                        LOGGER.error("IOError: ", e);
+                        if (!client.signalProvider.isConnected()) {
+                            LOGGER.error("Client wasn't connected, skipping!");
+                            continue;
+                        }
+
+                        Iterator<String> i = client.channels.iterator();
+                        for (int j = 0; j < random.nextInt(client.channels.size()); j++){
+                            i.next();
+                        }
+
+                        try {
+                            inject(i.next(), client.sessionKey);
+                        } catch (IOException e) {
+                            LOGGER.error("IOError: ", e);
+                        }
                     }
                 }
-            }
-        }.start();
+            }.start();
+        }
     }
 
     private static CountDownLatch connect(SignalProviderFactory signalProviderFactory) {
@@ -187,13 +182,14 @@ public class Example {
                 public void notify(Object sender, ObservableFuture <Void> item) {
                     if (item.isFailed()) {
                         LOGGER.error("Couldn't connect! " + item.getCause());
+                        latch.countDown();
                         return;
                     }
 
                     LOGGER.debug("Connected!");
                     TestClient.this.clientId = signalProvider.getClientId();
 
-                    if (StringUtil.isNullOrEmpty(sessionKey)) {
+                    if (StringUtil.isNullOrEmpty(Example.sessionKey)) {
                         TestClient.this.sessionKey = UUID.randomUUID().toString();
                     } else {
                         TestClient.this.sessionKey = Example.sessionKey;

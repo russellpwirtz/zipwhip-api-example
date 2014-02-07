@@ -14,6 +14,8 @@ import com.zipwhip.timers.Timer;
 import com.zipwhip.util.Factory;
 import com.zipwhip.util.StringUtil;
 import org.apache.log4j.BasicConfigurator;
+import org.apache.log4j.ConsoleAppender;
+import org.apache.log4j.PatternLayout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,7 +47,7 @@ public class Example {
     private static AsyncHttpClient asyncHttpClient = new AsyncHttpClient();
 
     public static void main(String... args) throws Exception {
-        BasicConfigurator.configure();
+        BasicConfigurator.configure(new ConsoleAppender(new PatternLayout("%d{dd MMM HH:mm:ss,SSS} %5p [%t] (%F:%L) - %m%n")));
 
         for (int i = 0; i < args.length; i++) {
             if (args[i].equals("-apiHost")) {

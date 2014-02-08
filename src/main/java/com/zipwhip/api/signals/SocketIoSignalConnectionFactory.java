@@ -22,7 +22,7 @@ public class SocketIoSignalConnectionFactory implements Factory<SignalConnection
     private Executor executor = SimpleExecutor.getInstance();
     private Timer timer;
     private ImportantTaskExecutor importantTaskExecutor;
-    private RetryStrategy retryStrategy = new ExponentialBackoffRetryStrategy(1000, 1.1);
+    private RetryStrategy retryStrategy = new ExponentialBackoffRetryStrategy(1, 1.5d);
 
     @Override
     public SignalConnection create() {

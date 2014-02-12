@@ -7,6 +7,8 @@ import com.zipwhip.api.signals.dto.SubscribeResult;
 import com.zipwhip.concurrent.ObservableFuture;
 import com.zipwhip.events.Observer;
 import com.zipwhip.important.ImportantTaskExecutor;
+import com.zipwhip.reliable.retry.ExponentialBackoffRetryStrategy;
+import com.zipwhip.reliable.retry.RetryStrategy;
 import com.zipwhip.signals2.presence.UserAgent;
 import com.zipwhip.signals2.presence.UserAgentCategory;
 import com.zipwhip.timers.HashedWheelTimer;
@@ -66,11 +68,15 @@ public class Example {
         Executor executor = Executors.newSingleThreadExecutor();
         Timer timer = new HashedWheelTimer();
 
+        RetryStrategy retryStrategy = new ExponentialBackoffRetryStrategy(1, 1.5d, 18);
+
         SocketIoSignalConnectionFactory signalConnectionFactory = new SocketIoSignalConnectionFactory();
 
         signalConnectionFactory.setSignalsUrl(signalsHost);
         signalConnectionFactory.setImportantTaskExecutor(importantTaskExecutor);
         signalConnectionFactory.setExecutor(executor);
+        signalConnectionFactory.setRetryStrategy(retryStrategy);
+        signalConnectionFactory.setTimer(timer);
 
         SignalProviderFactory signalProviderFactory = new SignalProviderFactory();
         Factory<BufferedOrderedQueue<DeliveredMessage>> bufferedOrderedQueueFactory = new SilenceOnTheLineBufferedOrderedQueueFactory(timer);

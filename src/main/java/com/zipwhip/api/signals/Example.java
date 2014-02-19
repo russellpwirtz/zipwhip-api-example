@@ -178,6 +178,7 @@ public class Example {
             this.signalProvider = signalProvider;
 
             signalProvider.getSignalReceivedEvent().addObserver(new SignalObserver());
+            signalProvider.getExceptionEvent().addObserver(EXCEPTION_EVENT_OBSERVER);
             signalProvider.getBindEvent().addObserver(BIND_RESULT_OBSERVER);
         }
 
@@ -239,4 +240,10 @@ public class Example {
         builder.execute();
     }
 
+    private static final Observer<Throwable> EXCEPTION_EVENT_OBSERVER = new Observer<Throwable>() {
+        @Override
+        public void notify(Object sender, Throwable item) {
+            LOGGER.error("Received exception! " + item.getCause());
+        }
+    };
 }

@@ -132,7 +132,7 @@ public class Example {
         }
     }
 
-    private static CountDownLatch connect(SignalProviderFactory signalProviderFactory) {
+    private static CountDownLatch connect(SignalProviderFactory signalProviderFactory) throws Exception {
         UserAgent userAgent = new UserAgent();
         userAgent.setBuild("zipwhip-api example");
         userAgent.setCategory(UserAgentCategory.Desktop);
@@ -145,7 +145,7 @@ public class Example {
 
     }
 
-    private static TestClient createTestClient(SignalProviderFactory signalProviderFactory) {
+    private static TestClient createTestClient(SignalProviderFactory signalProviderFactory) throws Exception {
         return new TestClient((SignalProviderImpl) signalProviderFactory.create());
     }
 
